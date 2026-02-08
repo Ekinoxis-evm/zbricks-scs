@@ -45,97 +45,127 @@ The ZBrick auction system implements a **4-phase Continuous Clearing Auction (CC
 ### Core Features
 
 - 💰 **Winner-Takes-All**: Only final winner pays, all others refunded
-- 🔄 **Continuous Bidding**: New bids accepted throughout phases 0-2
+- 🔄 **Incremental Bidding**: Users can add to their own bids multiple times
+- 📊 **Cumulative Tracking**: userBids[address] stores total bid per user
 - 📈 **Progressive Reveal**: More property info revealed each phase
 - 🔒 **Phase Locking**: Each phase's winner locked when advancing
-- 💸 **Pull Refunds**: Safe withdrawal pattern for outbid participants
-- ⏸️ **Emergency Pause**: Admin can pause for safety
+- 💸 **Pull Withdrawals**: Users can withdraw anytime before finalization
+- ⏸️ **Emergency Pause**: Owner can pause for safety
 
 ---
 
 ## Auction Phases
 
-### Phase 0: Initial Reveal (48 hours)
+### Phase 0: Initial Reveal (Configurable, min 1 day)
 
-**Duration**: 48 hours (configurable, minimum 24h)  
+**Duration**: Configurable (default 1 day minimum)  
 **Status**: Bidding Active  
-**NFT Metadata**: Basic information
+**NFT Metadata**: Basic information (Phase 0 URI)
 
 #### What Happens
 
-- Auction starts immediately upon deployment
-- Initial property metadata revealed (Phase 0 URI)
-- Bidders can start placing bids
-- Each new bid must exceed current highest bid
-- Previous highest bidder automatically moved to refund queue
+- Auction starts immediately upon deployment with Phase 0
+- Initial property metadata revealed via Phase 0 URI
+- Bidders can start placing INCREMENTAL bids
+- Users can bid multiple times, each bid ADDS to their total
+- Leader recalculated after every bid/withdrawal
+
+#### Bidding Mechanics
+
+```solidity
+// First bid: 5,000 USDC
+IERC20(paymentToken).approve(auctionAddress, 5000000000);
+auction.placeBid(5000000000);  // userBids[you] = 5,000 USDC
+
+// Later, add 2,000 more USDC
+IERC20(paymentToken).approve(auctionAddress, 2000000000);
+auction.placeBid(2000000000);  // userBids[you] = 7,000 USDC total!
+
+// Can withdraw full amount anytime before finalization
+auction.withdrawBid();  // Get all 7,000 USDC back
+```
 
 #### Bidding Requirements
 
-```solidity
-// Minimum bid: Must exceed current highest bid
-require(amount > currentHighBid, "Bid too low");
-
-// USDC approval required
-IERC20(usdc).approve(auctionAddress, bidAmount);
-
-// Place bid
-auction.placeBid(bidAmount);
-```
+- **Minimum Total**: New total bid (userBids[you] + newAmount) >= floorPrice
+- **Increment Rule** (if enforced): If not current leader, new total >= currentHighBid * (1 + minBidIncrementPercent/100)
+- **Payment Token**: USDC or configured payment token (6 decimals)
+- **Approval**: Must approve payment token for incremental amount
 
 #### State Variables During Phase 0
 
 ```solidity
 currentPhase = 0
-currentLeader = <highest bidder address>
-currentHighBid = <highest bid amount>
+currentLeader = <address with highest userBids[address]>
+currentHighBid = <highest userBids value across all bidders>
+userBids[Alice] = <Alice's cumulative bid>
+userBids[Bob] = <Bob's cumulative bid>
 phases[0].revealed = false  // Not locked yet
 phases[0].startTime = <deployment timestamp>
-phases[0].minDuration = 48 hours
+phases[0].minDuration = 1 day (or configured value)
 ```
 
 #### Example Timeline
 
 ```
-Day 0, 00:00 - Auction starts
-Day 0, 02:00 - Alice bids 1000 USDC (currentLeader: Alice)
-Day 0, 06:00 - Bob bids 1200 USDC (currentLeader: Bob, Alice refunded 1000 USDC)
-Day 1, 12:00 - Carol bids 1500 USDC (currentLeader: Carol, Bob refunded 1200 USDC)
-Day 2, 00:00 - Phase 0 duration complete, ready to advance
+Day 0, 00:00 - Auction starts, Phase 0 begins
+Day 0, 02:00 - Alice bids 1000 USDC
+               userBids[Alice] = 1000
+               currentLeader = Alice, currentHighBid = 1000
+
+Day 0, 06:00 - Bob bids 1200 USDC  
+               userBids[Bob] = 1200
+               currentLeader = Bob, currentHighBid = 1200
+               Alice still has her 1000 USDC in contract
+
+Day 0, 08:00 - Alice adds 500 USDC more
+               userBids[Alice] = 1500
+               currentLeader = Alice, currentHighBid = 1500
+               Bob still has his 1200 USDC in contract
+
+Day 0, 10:00 - Carol bids 2000 USDC
+               userBids[Carol] = 2000
+               currentLeader = Carol, currentHighBid = 2000
+
+Day 1, 00:01 - Phase 0 duration complete, owner can advance
 ```
 
 #### Phase 0 End Conditions
 
-- ✅ 48 hours elapsed (automatic readiness)
-- ✅ Admin calls `advancePhase()` after duration met
+- ✅ Minimum duration elapsed (1+ day)
+- ✅ Owner calls `advancePhase()` after duration met
 
 ---
 
-### Phase 1: Second Reveal (24 hours)
+### Phase 1: Second Reveal (Configurable, min 1 day)
 
-**Duration**: 24 hours (configurable, minimum 24h)  
+**Duration**: Configurable (default 1 day minimum)  
 **Status**: Bidding Active  
-**NFT Metadata**: Second reveal
+**NFT Metadata**: Second reveal (Phase 1 URI)
 
 #### What Happens
 
-- Admin calls `advancePhase()` to start Phase 1
+- Owner calls `advancePhase()` to start Phase 1
 - Phase 0 winner and bid locked in `phases[0]`
 - Phase 0 marked as `revealed = true`
-- New metadata URI revealed (Phase 1 URI)
-- Bidding continues with new baseline
+- NFT metadata automatically advances to Phase 1 URI
+- Bidding continues - all previous bidders keep their funds in contract
+- Users can still add to their bids or withdraw
 
 #### Phase Advancement Process
 
 ```solidity
-// Admin checks readiness
-uint256 timeLeft = auction.getTimeRemaining();
-require(timeLeft == 0, "Phase 0 not complete");
+// Owner checks readiness
+uint256 elapsed = block.timestamp - phases[0].startTime;
+require(elapsed >= phases[0].minDuration, "Phase 0 not complete");
 
-// Advance auction phase
-auction.advancePhase();  // Locks Phase 0, starts Phase 1
+// Advance auction phase (owner only)
+auction.advancePhase();  // Locks Phase 0 data, starts Phase 1, advances NFT metadata
 
-// Advance NFT metadata
-houseNFT.advancePhase(1);  // Updates to Phase 1 URI
+// Phase 0 data now locked:
+phases[0].leader = <Phase 0 leader address>
+phases[0].highBid = <Phase 0 high bid>
+phases[0].revealed = true
 ```
 
 #### State Variables During Phase 1
@@ -143,88 +173,126 @@ houseNFT.advancePhase(1);  // Updates to Phase 1 URI
 ```solidity
 currentPhase = 1
 phases[0].revealed = true           // Phase 0 locked
-phases[0].leader = <Phase 0 winner>
-phases[0].highBid = <Phase 0 high bid>
-phases[1].startTime = <phase 1 start timestamp>
-phases[1].minDuration = 24 hours
-phases[1].revealed = false          // Not locked yet
+phases[0].leader = Carol            // Locked leader from Phase 0
+phases[0].highBid = 2000            // Locked high bid
+phases[1].startTime = <now>
+phases[1].minDuration = 1 day
+phases[1].revealed = false
+
+// All user bids still active:
+userBids[Alice] = 1500
+userBids[Bob] = 1200  
+userBids[Carol] = 2000
+currentLeader = Carol  // May change as more bids come in
+currentHighBid = 2000
 ```
 
 #### Bidding Continues
 
-- Previous highest bidder from Phase 0 can bid again
+- ALL previous bidders' funds remain in contract
+- Anyone can add to their bid or withdraw
 - New bidders can join
-- Must exceed current highest bid in Phase 1
-- All previous refunds remain available for withdrawal
+- Leader recalculated after every change
+- No automatic refunds - users must withdraw manually
 
 #### Example Timeline
 
 ```
-Day 2, 00:01 - Admin advances to Phase 1
-                Phase 0 locked: Carol won with 1500 USDC
-Day 2, 02:00 - Dave bids 1600 USDC (currentLeader: Dave)
-Day 2, 08:00 - Carol bids 1800 USDC (currentLeader: Carol, Dave refunded 1600 USDC)
-Day 3, 00:00 - Phase 1 duration complete, ready to advance
+Day 1, 00:01 - Owner advances to Phase 1
+               Phase 0 locked: Carol leads with 2000 USDC
+               Phase 1 starts, NFT shows Phase 1 metadata
+
+Day 1, 02:00 - Dave joins, bids 2500 USDC
+               userBids[Dave] = 2500
+               currentLeader = Dave, currentHighBid = 2500
+
+Day 1, 08:00 - Carol adds 1000 USDC more
+               userBids[Carol] = 3000 total
+               currentLeader = Carol, currentHighBid = 3000
+
+Day 1, 10:00 - Bob withdraws his 1200 USDC (decides not to compete)
+               userBids[Bob] = 0
+
+Day 2, 00:01 - Phase 1 duration complete, owner can advance
 ```
 
 ---
 
-### Phase 2: Final Reveal (24 hours)
+### Phase 2: Final Reveal (Configurable, min 1 day)
 
-**Duration**: 24 hours (configurable, minimum 24h)  
+**Duration**: Configurable (default 1 day minimum)  
 **Status**: Bidding Active (Last Chance)  
-**NFT Metadata**: Complete information
+**NFT Metadata**: Complete information (Phase 2 URI)
 
 #### What Happens
 
-- Admin calls `advancePhase()` to start Phase 2
+- Owner calls `advancePhase()` to start Phase 2
 - Phase 1 winner and bid locked in `phases[1]`
 - Phase 1 marked as `revealed = true`
-- Final metadata URI revealed (Phase 2 URI)
-- Last opportunity for bidding
+- NFT metadata automatically advances to Phase 2 URI
+- Final opportunity for bidding - same mechanics as Phase 0 and 1
 
 #### Phase Advancement Process
 
 ```solidity
-// Admin checks readiness
-uint256 timeLeft = auction.getTimeRemaining();
-require(timeLeft == 0, "Phase 1 not complete");
+// Owner checks readiness
+uint256 elapsed = block.timestamp - phases[1].startTime;
+require(elapsed >= phases[1].minDuration, "Phase 1 not complete");
 
-// Advance auction phase
-auction.advancePhase();  // Locks Phase 1, starts Phase 2
+// Advance auction phase (owner only)
+auction.advancePhase();  // Locks Phase 1, starts Phase 2, advances NFT metadata
 
-// Advance NFT metadata
-houseNFT.advancePhase(2);  // Updates to Phase 2 URI
+// Phase 1 data now locked:
+phases[1].leader = <Phase 1 leader>
+phases[1].highBid = <Phase 1 high bid>
+phases[1].revealed = true
 ```
-
-#### State Variables During Phase 2
 
 ```solidity
 currentPhase = 2
 phases[1].revealed = true           // Phase 1 locked
-phases[1].leader = <Phase 1 winner>
+phases[1].leader = <Phase 1 leader>
 phases[1].highBid = <Phase 1 high bid>
-phases[2].startTime = <phase 2 start timestamp>
-phases[2].minDuration = 24 hours
-phases[2].revealed = false          // Not locked yet
+phases[2].startTime = <now>
+phases[2].minDuration = 1 day
+phases[2].revealed = false
+
+// All user bids still active:
+userBids[Alice] = 1500 (or 0 if withdrew)
+userBids[Carol] = 3000
+userBids[Dave] = 2500
+currentLeader = Carol
+currentHighBid = 3000
 ```
 
 #### Final Bidding Round
 
-- All property information revealed
-- Bidders make informed final decisions
+- All property information revealed (Phase 2 URI)
+- Bidders make informed final decisions  
 - Most competitive phase typically
-- Last chance to participate
+- Last chance to bid or increase existing bids
+- Can still withdraw before finalization
 
 #### Example Timeline
 
 ```
-Day 3, 00:01 - Admin advances to Phase 2
-                Phase 1 locked: Carol won with 1800 USDC
-Day 3, 04:00 - Eve bids 2000 USDC (currentLeader: Eve)
-Day 3, 12:00 - Carol bids 2200 USDC (currentLeader: Carol, Eve refunded 2000 USDC)
-Day 3, 20:00 - Eve bids 2500 USDC (currentLeader: Eve, Carol refunded 2200 USDC)
-Day 4, 00:00 - Phase 2 duration complete, ready to finalize
+Day 2, 00:01 - Owner advances to Phase 2
+               Phase 1 locked: Carol led with 3000 USDC
+               Phase 2 starts, NFT shows complete info
+
+Day 2, 04:00 - Eve joins, bids 3500 USDC
+               userBids[Eve] = 3500
+               currentLeader = Eve, currentHighBid = 3500
+
+Day 2, 12:00 - Carol adds 1000 USDC more
+               userBids[Carol] = 4000 total
+               currentLeader = Carol, currentHighBid = 4000
+
+Day 2, 20:00 - Eve adds 1000 USDC more
+               userBids[Eve] = 4500 total
+               currentLeader = Eve, currentHighBid = 4500
+
+Day 3, 00:01 - Phase 2 duration complete, owner can finalize
 ```
 
 ---
@@ -233,31 +301,35 @@ Day 4, 00:00 - Phase 2 duration complete, ready to finalize
 
 **Duration**: Indefinite  
 **Status**: Bidding Closed  
-**NFT Metadata**: Winner reveal
+**NFT Metadata**: Winner reveal (Phase 3 URI)
 
 #### What Happens
 
-- Admin calls `finalizeAuction()` to complete auction
+- Owner calls `finalizeAuction()` to complete auction
 - Phase 2 winner and bid locked in `phases[2]`
 - `finalized = true`
-- NFT transferred to winner
-- Winner's payment held in contract
-- All other bidders can withdraw refunds
+- NFT automatically transferred to winner (currentLeader)
+- NFT automatically advanced to Phase 3 metadata
+- Winner's payment held in contract for owner withdrawal
+- All losing bidders keep their funds in contract until they withdraw
 
 #### Finalization Process
 
 ```solidity
-// Admin checks readiness
+// Owner checks readiness
 require(currentPhase == 2, "Must be in Phase 2");
-uint256 timeLeft = auction.getTimeRemaining();
-require(timeLeft == 0, "Phase 2 not complete");
-require(currentLeader != address(0), "No winner");
+uint256 elapsed = block.timestamp - phases[2].startTime;
+require(elapsed >= phases[2].minDuration, "Phase 2 not complete");
 
-// Finalize auction
-auction.finalizeAuction();  // Transfers NFT, locks Phase 2
+// Finalize auction (owner only)
+auction.finalizeAuction();
 
-// Advance NFT to final metadata
-houseNFT.advancePhase(3);  // Updates to Phase 3 URI (winner reveal)
+// What happens automatically:
+// 1. Locks Phase 2 data
+// 2. Sets winner = currentLeader
+// 3. Transfers NFT to winner
+// 4. Advances NFT to Phase 3 metadata
+// 5. Sets finalized = true
 ```
 
 #### State Variables After Finalization
@@ -265,150 +337,287 @@ houseNFT.advancePhase(3);  // Updates to Phase 3 URI (winner reveal)
 ```solidity
 currentPhase = 2  // Stays at 2
 finalized = true
+winner = Eve  // Current leader at finalization
 phases[2].revealed = true
-phases[2].leader = <Final winner>
-phases[2].highBid = <Final winning bid>
+phases[2].leader = Eve
+phases[2].highBid = 4500
+
+// User bids remain:
+userBids[Eve] = 4500      // Winner - CANNOT withdraw
+userBids[Carol] = 4000    // Can withdraw
+userBids[Dave] = 2500     // Can withdraw
+userBids[Alice] = 1500    // Can withdraw (if didn't withdraw earlier)
 ```
 
 #### Post-Finalization Actions
 
-**Winner**:
+**Winner** (Eve in example):
 - ✅ Owns NFT (automatically transferred)
-- ❌ Cannot withdraw (they won, payment held)
-- ✅ Can view winner metadata (Phase 3 URI)
+- ✅ Can view winner metadata (NFT shows Phase 3 URI)
+- ❌ **CANNOT withdraw** (they won, their payment stays for owner)
 
-**Other Bidders**:
-- ✅ Can withdraw full refunds at any time
-- ✅ No fees, no penalties
-- ✅ Pull refunds when convenient
+**Losing Bidders** (Carol, Dave, Alice):
+- ✅ Can withdraw FULL bid at any time via `withdrawBid()`
+- ✅ No fees, no penalties, no deadline
+- ✅ Pull refunds when convenient (gas efficient)
+- ⚠️ Must manually call `withdrawBid()` - no automatic refunds
 
-**Admin**:
-- ✅ Can withdraw proceeds (winning bid amount)
-- ✅ Can only withdraw once
-- ✅ Can transfer admin role if needed
+**Owner**:
+- ✅ Can withdraw proceeds (winning bid amount) via `withdrawProceeds()`
+- ✅ Can only withdraw winning bid once
+- ✅ Receives: userBids[winner] amount
 
 #### Example Timeline
 
 ```
-Day 4, 00:01 - Admin finalizes auction
-                Phase 2 locked: Eve won with 2500 USDC
-                NFT transferred to Eve
-Day 4, 00:02 - Admin advances NFT to Phase 3 metadata
-                Winner reveal displayed
-Day 4, 01:00 - Carol withdraws refund (2200 USDC)
-Day 4, 02:00 - Dave withdraws refund (1600 USDC)
-Day 5, 00:00 - Admin withdraws proceeds (2500 USDC)
+Day 3, 00:01 - Owner finalizes auction
+               Phase 2 locked: Eve won with 4500 USDC
+               NFT automatically transferred to Eve
+               NFT metadata automatically advances to Phase 3
+
+Day 3, 01:00 - Carol withdraws her bid (4000 USDC back to Carol)
+               userBids[Carol] = 0
+
+Day 3, 02:00 - Dave withdraws his bid (2500 USDC back to Dave)
+               userBids[Dave] = 0
+
+Day 3, 03:00 - Owner withdraws proceeds (4500 USDC from Eve's bid)
+
+Day 5, 10:00 - Alice finally withdraws (1500 USDC back to Alice)
+               userBids[Alice] = 0
 ```
 
 ---
 
 ## Bidding Mechanics
 
-### How Bidding Works
+### How Incremental Bidding Works
 
-#### 1. Check Current State
+The auction uses **cumulative incremental bidding** where each `placeBid()` call **adds** to your existing total bid.
+
+**Key Concept**: `userBids[address]` stores your total cumulative bid, not individual bids.
+
+### Complete Bidding Flow
+
+#### 1. Check Current Auction State
 
 ```solidity
-// Get auction state
-(uint8 phase, address leader, uint256 highBid, bool finalized, bool biddingOpen) 
-    = auction.getAuctionState();
+// Check if bidding is open
+uint8 phase = auction.currentPhase();
+bool finalized = auction.finalized();
+address leader = auction.currentLeader();
+uint256 highBid = auction.currentHighBid();
 
-require(biddingOpen, "Bidding closed");
+require(phase <= 2, "Bidding closed");
 require(!finalized, "Auction ended");
 ```
 
 ```bash
-cast call <AUCTION_ADDRESS> "getAuctionState()" --rpc-url base_sepolia
+# Check auction status
+cast call <AUCTION_ADDRESS> "currentPhase()" --rpc-url base_sepolia
+cast call <AUCTION_ADDRESS> "currentLeader()" --rpc-url base_sepolia
+cast call <AUCTION_ADDRESS> "currentHighBid()" --rpc-url base_sepolia
+cast call <AUCTION_ADDRESS> "finalized()" --rpc-url base_sepolia
 ```
 
-#### 2. Prepare Bid Amount
-
-```javascript
-// Frontend: Convert USDC amount to 6 decimals
-const bidAmountUSDC = 1000; // 1000 USDC
-const bidAmountWei = ethers.utils.parseUnits(bidAmountUSDC.toString(), 6);
-// Result: 1000000000 (1000 * 10^6)
-```
+#### 2. Check Your Current Bid
 
 ```solidity
-// Solidity: USDC has 6 decimals
-uint256 bidAmount = 1000 * 10**6; // 1000 USDC
-```
-
-#### 3. Approve USDC Transfer
-
-```solidity
-// Approve auction to spend USDC
-IERC20(usdc).approve(auctionAddress, bidAmount);
+uint256 myCurrentBid = auction.userBids(msg.sender);
+// Returns your total cumulative bid
 ```
 
 ```bash
-cast send <USDC_ADDRESS> \
+cast call <AUCTION_ADDRESS> "userBids(address)" <YOUR_ADDRESS> --rpc-url base_sepolia
+```
+
+```javascript
+// Frontend
+const myBid = await auction.userBids(myAddress);
+console.log('My current total bid:', ethers.formatUnits(myBid, 6), 'USDC');
+```
+
+#### 3. Calculate Incremental Amount Needed
+
+```javascript
+// Example: You have 1000 USDC bid, want to reach 1500 USDC total
+const myCurrentBid = await auction.userBids(myAddress);
+const desiredTotal = ethers.parseUnits('1500', 6);
+const incrementalAmount = desiredTotal - myCurrentBid;
+
+// Result: incrementalAmount = 500 USDC worth of tokens
+```
+
+#### 4. Approve Payment Token (Incremental Amount)
+
+```solidity
+// Approve only the incremental amount you're adding
+IERC20(paymentToken).approve(auctionAddress, incrementalAmount);
+```
+
+```bash
+cast send <PAYMENT_TOKEN_ADDRESS> \
     "approve(address,uint256)" \
     <AUCTION_ADDRESS> \
-    1000000000 \
+    500000000 \
     --private-key $PRIVATE_KEY \
     --rpc-url base_sepolia
 ```
 
 ```javascript
 // Frontend
-const usdcContract = new ethers.Contract(usdcAddress, usdcABI, signer);
-const approveTx = await usdcContract.approve(auctionAddress, bidAmountWei);
+const paymentToken = new ethers.Contract(paymentTokenAddress, IERC20_ABI, signer);
+const approveTx = await paymentToken.approve(auctionAddress, incrementalAmount);
 await approveTx.wait();
 ```
 
-#### 4. Place Bid
+#### 5. Place Incremental Bid
 
 ```solidity
-auction.placeBid(bidAmount);
+// Add 500 USDC to your existing 1000 USDC bid
+auction.placeBid(500000000);  // Your total becomes 1500 USDC
 ```
 
 ```bash
 cast send <AUCTION_ADDRESS> \
     "placeBid(uint256)" \
-    1000000000 \
+    500000000 \
     --private-key $PRIVATE_KEY \
     --rpc-url base_sepolia
 ```
 
 ```javascript
 // Frontend
-const auctionContract = new ethers.Contract(auctionAddress, auctionABI, signer);
-const bidTx = await auctionContract.placeBid(bidAmountWei);
+const bidTx = await auction.placeBid(incrementalAmount);
 await bidTx.wait();
+
+// Verify new total
+const newTotal = await auction.userBids(myAddress);
+console.log('New total bid:', ethers.formatUnits(newTotal, 6), 'USDC');
 ```
 
-### What Happens When You Bid
+### What Happens When You Call placeBid()
 
 ```solidity
-// Internal auction logic when placeBid() is called:
+// Internal contract logic:
 
-// 1. Validate bid
-require(amount > currentHighBid, "Bid too low");
-require(currentPhase <= 2, "Bidding closed");
-require(!paused, "Auction paused");
-require(!finalized, "Auction finalized");
-
-// 2. Handle previous leader (if exists)
-if (currentLeader != address(0)) {
-    refundBalance[currentLeader] += currentHighBid;  // Add to refund queue
+function placeBid(uint256 amount) external whenNotPaused nonReentrant {
+    // 1. Validate auction state
+    require(!finalized, "Auction ended");
+    require(currentPhase <= 2, "Bidding closed");
+    require(amount > 0, "Amount must be > 0");
+    
+    // 2. Calculate new total
+    uint256 newTotalBid = userBids[msg.sender] + amount;
+    
+    // 3. Validate minimum requirements
+    require(newTotalBid >= floorPrice, "Below floor price");
+    
+    // 4. Validate increment (if enforced and not current leader)
+    if (enforceMinIncrement && msg.sender != currentLeader && currentHighBid > 0) {
+        uint256 minRequired = currentHighBid + (currentHighBid * minBidIncrementPercent / 100);
+        require(newTotalBid >= minRequired, "Increment too low");
+    }
+    
+    // 5. Transfer incremental tokens from you
+    paymentToken.transferFrom(msg.sender, address(this), amount);
+    
+    // 6. Update your total bid
+    userBids[msg.sender] = newTotalBid;
+    
+    // 7. Add to bidders set (if new)
+    bidders.add(msg.sender);
+    
+    // 8. Recalculate leader (checks ALL bidders)
+    _updateLeader();  // Iterates through all userBids to find highest
+    
+    // 9. Emit event
+    emit BidPlaced(msg.sender, amount, newTotalBid, currentPhase);
 }
-
-// 3. Update state
-currentLeader = msg.sender;
-currentHighBid = amount;
-
-// 4. Transfer USDC
-usdc.transferFrom(msg.sender, address(this), amount);
-
-// 5. Emit event
-emit BidPlaced(currentPhase, msg.sender, amount);
 ```
 
 ### Bid Requirements
 
-| Requirement | Description |
+| Requirement | Description | Example |
+|-------------|-------------|---------|
+| **Minimum Total Bid** | Your new total must be >= floorPrice | If floor is 1000 USDC, userBids[you] must reach 1000+ |
+| **Minimum Increment** (if enforced) | If not current leader, new total must be >= currentHighBid * (1 + minBidIncrementPercent/100) | If high bid is 2000 USDC and increment is 5%, you need 2100+ USDC total |
+| **Phase Check** | Must be in phase 0, 1, or 2 | Phase 3 or finalized = no bidding |
+| **Approval** | Must approve payment token for incremental amount | Approve exact amount you're adding |
+| **Not Paused** | Auction must not be paused | Owner can pause for emergencies |
+
+### Bidding Scenarios
+
+#### Scenario A: First-Time Bidder
+
+```javascript
+// Alice has never bid before
+const aliceBid = await auction.userBids(aliceAddress);
+// Returns: 0
+
+// Alice wants to bid 1500 USDC
+await paymentToken.approve(auction, ethers.parseUnits('1500', 6));
+await auction.placeBid(ethers.parseUnits('1500', 6));
+
+// Result:
+// userBids[Alice] = 1500 USDC
+// If highest, currentLeader = Alice, currentHighBid = 1500
+```
+
+#### Scenario B: Increasing Your Own Bid
+
+```javascript
+// Bob already bid 2000 USDC
+const bobBid = await auction.userBids(bobAddress);
+// Returns: 2000000000 (2000 USDC)
+
+// Bob wants to increase to 3000 USDC total
+const increment = ethers.parseUnits('1000', 6);
+await paymentToken.approve(auction, increment);
+await auction.placeBid(increment);
+
+// Result:
+// userBids[Bob] = 3000 USDC total
+// Bob paid: 2000 + 1000 = 3000 USDC cumulative
+```
+
+#### Scenario C: Multiple Bidders Competing
+
+```javascript
+// State: Carol leads with 2500 USDC
+// userBids[Carol] = 2500
+
+// Dave bids 3000 USDC (new)
+await auction.placeBid(ethers.parseUnits('3000', 6));
+// userBids[Dave] = 3000
+// currentLeader = Dave, currentHighBid = 3000
+// Carol's 2500 USDC still in contract
+
+// Carol adds 1000 more (2500 + 1000 = 3500 total)
+await auction.placeBid(ethers.parseUnits('1000', 6));
+// userBids[Carol] = 3500
+// currentLeader = Carol, currentHighBid = 3500
+// Dave's 3000 USDC still in contract
+
+// Dave can withdraw his 3000 USDC or add more to compete
+```
+
+#### Scenario D: Strategic Withdrawal and Re-entry
+
+```javascript
+// Eve bid 1800 USDC but sees she's losing
+const eveBid = await auction.userBids(eveAddress);
+// Returns: 1800000000
+
+// Eve withdraws to free up capital
+await auction.withdrawBid();
+// userBids[Eve] = 0
+// Eve receives 1800 USDC back
+
+// Eve can bid again later with different strategy
+await auction.placeBid(ethers.parseUnits('4000', 6));
+// userBids[Eve] = 4000 (starts fresh from 0)
+```
 |-------------|-------------|
 | **Amount** | Must exceed `currentHighBid` |
 | **Phase** | Must be Phase 0, 1, or 2 |
