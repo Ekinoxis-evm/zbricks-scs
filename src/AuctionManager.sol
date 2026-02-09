@@ -133,11 +133,8 @@ contract AuctionManager is Ownable, Pausable, ReentrancyGuard, IERC721Receiver {
         require(_minBidIncrementPercent > 0 && _minBidIncrementPercent <= 100, "Invalid increment percent");
         require(_treasury != address(0), "Invalid treasury address");
         
-        // Validate NFT ownership
-        require(
-            IERC721(_nftContract).ownerOf(_tokenId) == address(this),
-            "Contract must own NFT"
-        );
+        // Note: NFT ownership is validated and transferred atomically by the Factory
+        // The Factory ensures the NFT is transferred to this contract immediately after construction
         
         paymentToken = IERC20(_paymentToken);
         nftContract = IERC721(_nftContract);

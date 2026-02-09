@@ -6,10 +6,12 @@
  * Usage: 
  *   node script/extractDeployment.js              - Extract all chains
  *   node script/extractDeployment.js [chainId]    - Extract specific chain
+ *   node script/extractDeployment.js abi          - Extract only ABIs (no deployment needed)
  * 
  * Example: 
  *   node script/extractDeployment.js 84532
  *   node script/extractDeployment.js all
+ *   node script/extractDeployment.js abi
  */
 
 const fs = require('fs');
@@ -19,8 +21,6 @@ const path = require('path');
 const CHAINS = {
   '84532': { name: 'Base Sepolia', explorer: 'https://base-sepolia.blockscout.com' },
   '8453': { name: 'Base Mainnet', explorer: 'https://base.blockscout.com' },
-  '5042002': { name: 'Arc Testnet', explorer: 'https://testnet.arcscan.app' },
-  '5042000': { name: 'Arc Mainnet', explorer: 'TBA' },
   '31337': { name: 'Local', explorer: null }
 };
 
@@ -126,8 +126,16 @@ function processDeployment(chainId, file) {
 function main() {
   const arg = process.argv[2];
   const extractAll = !arg || arg === 'all';
+  const abiOnly = arg === 'abi';
   
   console.log('🔍 Extracting deployment information...\n');
+  
+  // If only extracting ABIs, skip deployment processing
+  if (abiOnly) {
+    console.log('📦 Extracting ABIs only (no deployment data)...\n');
+    extractABIsOnly();
+    return;
+  }
   
   let deployments = [];
   
@@ -278,6 +286,40 @@ function generateMarkdownDocs(deployments, deploymentsDir) {
   fs.writeFileSync(docsFile, lines.join('\n'));
   
   console.log('   ✓ deployments/README.md');
+}
+
+function extractABIsOnly() {
+  const deploymentsDir = path.join(__dirname, '..', 'deployments');
+  if (!fs.existsSync(deploymentsDir)) {
+    fs.mkdirSync(deploymentsDir, { recursive: true });
+  }
+  
+  const abiDir = path.join(deploymentsDir, 'abi');
+  if (!fs.existsSync(abiDir)) {
+    fs.mkdirSync(abiDir, { recursive: true });
+  }
+  
+  // List of contracts to extract ABIs for
+  const contractNames = ['HouseNFT', 'AuctionFactory', 'AuctionManager'];
+  
+  console.log('📦 Extracting ABIs from compiled artifacts:\n');
+  
+  let extracted = 0;
+  for (const name of contractNames) {
+    const abi = extractABI(name);
+    if (abi) {
+      const abiFile = path.join(abiDir, `${name}.json`);
+      fs.writeFileSync(abiFile, JSON.stringify(abi, null, 2));
+      console.log(`   ✓ abi/${name}.json`);
+      extracted++;
+    } else {
+      console.log(`   ✗ ${name} - not compiled yet (run 'forge build')`);
+    }
+  }
+  
+  console.log(`\n💾 Extracted ${extracted}/${contractNames.length} ABIs\n`);
+  console.log('✅ ABI extraction complete!\n');
+  console.log('💡 Tip: These ABIs work for any deployment of these contracts.\n');
 }
 
 try {

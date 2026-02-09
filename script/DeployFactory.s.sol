@@ -22,9 +22,6 @@ contract DeployFactory is Script {
     // Network-specific USDC addresses
     address constant BASE_MAINNET_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address constant BASE_SEPOLIA_USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
-    address constant ARC_TESTNET_USDC = 0x3600000000000000000000000000000000000000;
-    // Arc Mainnet USDC - Update when mainnet launches
-    address constant ARC_MAINNET_USDC = 0x0000000000000000000000000000000000000000;
     
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -48,22 +45,11 @@ contract DeployFactory is Script {
             // Base Sepolia
             usdcAddress = BASE_SEPOLIA_USDC;
             networkName = "Base Sepolia Testnet";
-        } else if (block.chainid == 5042002) {
-            // Arc Testnet
-            usdcAddress = ARC_TESTNET_USDC;
-            networkName = "Arc Testnet";
-        } else if (block.chainid == 5042000) {
-            // Arc Mainnet (placeholder - update when mainnet launches)
-            usdcAddress = ARC_MAINNET_USDC;
-            networkName = "Arc Mainnet";
-            require(usdcAddress != address(0), "Arc Mainnet USDC address not configured");
         } else {
             console.log("ERROR: Unsupported network");
             console.log("Supported networks:");
             console.log("  - Base Mainnet (8453)");
             console.log("  - Base Sepolia (84532)");
-            console.log("  - Arc Testnet (5042002)");
-            console.log("  - Arc Mainnet (5042000) - Coming soon");
             revert("Unsupported network");
         }
         

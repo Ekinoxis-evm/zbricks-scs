@@ -32,7 +32,7 @@ A secure, factory-based multi-property auction system with USDC bidding. Deploy 
 - **Configurable Phases**: Custom durations per auction (e.g., 7d/14d/30d)
 - **Participation Fees**: Optional one-time fee per bidder (sent to treasury)
 - **Treasury System**: Gnosis Safe integration for fee and proceeds collection
-- **USDC Bidding**: Uses USDC token on Base/Base Sepolia/Arc networks
+- **USDC Bidding**: Uses USDC token on Base and Base Sepolia networks
 - **Pull-Based Refunds**: Secure withdrawal pattern for outbid participants
 - **Checks-Effects-Interactions**: Prevents reentrancy attacks
 - **Emergency Pause**: Admin can pause bidding while allowing withdrawals
@@ -193,7 +193,7 @@ forge script script/CreateAuction.s.sol:CreateAuction \
    |---------|----------|--------------|
    | **Base Sepolia** | Sepolia ETH | [Coinbase Faucet](https://coinbase.com/faucets/base-ethereum-goerli-faucet) |
    | **Base Mainnet** | ETH | Bridge from Ethereum mainnet |
-   | **Arc Testnet** | Testnet currency + USDC | [Arc Testnet Faucet](https://testnet.arcscan.app) |
+
 
 ### Supported Networks
 
@@ -201,8 +201,7 @@ forge script script/CreateAuction.s.sol:CreateAuction \
 |---------|----------|-----|----------|--------------|
 | **Base Sepolia** | 84532 | https://sepolia.base.org | [Blockscout](https://base-sepolia.blockscout.com) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
 | **Base Mainnet** | 8453 | https://mainnet.base.org | [Blockscout](https://base.blockscout.com) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| **Arc Testnet** | 5042002 | https://rpc.testnet.arc.network | [ArcScan](https://testnet.arcscan.app) | `0x3600000000000000000000000000000000000000` |
-| **Arc Mainnet** | 5042000 | TBA | TBA | TBA |
+
 
 ### Deployment Commands
 
@@ -213,12 +212,6 @@ forge script script/CreateAuction.s.sol:CreateAuction \
 
 # Base Mainnet (production)
 ./script/deploy-and-verify.sh base
-
-# Arc Testnet
-./script/deploy-and-verify.sh arc-testnet
-
-# Arc Mainnet
-./script/deploy-and-verify.sh arc
 ```
 
 > **What this does:** Runs `DeployFactory.s.sol` with automatic network detection, RPC configuration, and Blockscout verification. Deploys **infrastructure only** (HouseNFT + AuctionFactory).
@@ -321,7 +314,7 @@ This generates:
 | "Insufficient funds for gas" | Fund your wallet with network's native currency |
 | "USDC address not configured" | Deploy to a supported network |
 | "Verification failed" | Wait 30s and run `./script/verify-contracts.sh <network>` |
-| "Network not supported" | Use: `base-sepolia`, `base`, `arc-testnet`, or `arc` |
+| "Network not supported" | Use: `base-sepolia` or `base` |
 
 ## 🌐 Deployed Contracts
 
@@ -333,8 +326,6 @@ The system is deployed on multiple networks. All contracts are verified on Block
 |---------|----------|--------|----------|
 | **Base Sepolia** | 84532 | ✅ Deployed | [Blockscout](https://base-sepolia.blockscout.com) |
 | **Base Mainnet** | 8453 | ✅ Deployed | [Blockscout](https://base.blockscout.com) |
-| **Arc Testnet** | 5042002 | ✅ Deployed | [ArcScan](https://testnet.arcscan.app) |
-| **Arc Mainnet** | 5042000 | 🔜 Coming Soon | TBA |
 
 ### Contract Addresses
 
@@ -360,16 +351,6 @@ The system is deployed on multiple networks. All contracts are verified on Block
 
 </details>
 
-<details>
-<summary><b>Arc Testnet</b></summary>
-
-| Contract | Address |
-|----------|---------|
-| **HouseNFT** | [`0x6bb77d0b235d4d27f75ae0e3a4f465bf8ac91c0b`](https://testnet.arcscan.app/address/0x6bb77d0b235d4d27f75ae0e3a4f465bf8ac91c0b) |
-| **AuctionFactory** | [`0x88cc60b8a6161758b176563c78abeb7495d664d1`](https://testnet.arcscan.app/address/0x88cc60b8a6161758b176563c78abeb7495d664d1) |
-| **AuctionManager** | [`0x2fbaed3a30a53bd61676d9c5f46db5a73f710f53`](https://testnet.arcscan.app/address/0x2fbaed3a30a53bd61676d9c5f46db5a73f710f53) |
-
-</details>
 
 ### Integration Resources
 

@@ -22,8 +22,6 @@ if [ -z "$NETWORK" ]; then
     echo "Supported networks:"
     echo "  base-sepolia  - Base Sepolia Testnet"
     echo "  base          - Base Mainnet"
-    echo "  arc-testnet   - Arc Testnet"
-    echo "  arc           - Arc Mainnet"
     echo ""
     exit 1
 fi
@@ -46,16 +44,6 @@ case $NETWORK in
         RPC_URL="https://mainnet.base.org"
         VERIFIER_URL="https://base.blockscout.com/api/"
         CHAIN_ID=8453
-        ;;
-    arc-testnet)
-        RPC_URL="https://rpc.testnet.arc.network"
-        VERIFIER_URL="https://testnet.arcscan.app/api/"
-        CHAIN_ID=5042002
-        ;;
-    arc)
-        RPC_URL="https://rpc.arc.network"  # Update when mainnet launches
-        VERIFIER_URL="https://arcscan.app/api/"  # Update when mainnet launches
-        CHAIN_ID=5042000  # Placeholder - update when mainnet launches
         ;;
     *)
         echo "❌ Error: Unknown network: $NETWORK"

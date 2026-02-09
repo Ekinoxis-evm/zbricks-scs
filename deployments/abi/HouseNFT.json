@@ -316,6 +316,19 @@
   },
   {
     "type": "function",
+    "name": "setFactory",
+    "inputs": [
+      {
+        "name": "_factory",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setPhaseURIs",
     "inputs": [
       {
@@ -483,6 +496,19 @@
   },
   {
     "type": "function",
+    "name": "trustedFactory",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "updatePhaseURI",
     "inputs": [
       {
@@ -585,6 +611,19 @@
       },
       {
         "name": "controller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FactorySet",
+    "inputs": [
+      {
+        "name": "factory",
         "type": "address",
         "indexed": true,
         "internalType": "address"

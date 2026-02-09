@@ -1,38 +1,54 @@
 # ZBrick Deployment Guide
 
-Quick reference for deploying and managing the ZBrick auction system.
+Clean, streamlined deployment process for the ZBrick auction system on Base networks.
+
+---
+
+## 🚀 Quick Start
+
+### Before You Begin
+
+```bash
+# 1. Install Foundry (if not already installed)
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+
+# 2. Setup environment
+cp .env.example .env
+# Edit .env and add your PRIVATE_KEY
+
+# 3. Compile contracts
+forge build
+
+# 4. Get testnet ETH
+# Visit: https://coinbase.com/faucets/base-ethereum-goerli-faucet
+```
+
+---
 
 ## 📋 The 4 Essential Scripts
 
 ### 1️⃣ Deploy Infrastructure (Once Per Network)
 
-**Script:** `deploy-and-verify.sh`  
-**What it does:** Deploys HouseNFT + AuctionFactory with automatic verification  
-**When to use:** First time on a new network
+**Deploy shared contracts:** HouseNFT + AuctionFactory
 
 ```bash
-# Deploy to testnet
+# Deploy to Base Sepolia (testnet)
 ./script/deploy-and-verify.sh base-sepolia
 
-# Deploy to mainnet
+# Deploy to Base Mainnet (production)
 ./script/deploy-and-verify.sh base
-
-# Other networks
-./script/deploy-and-verify.sh arc-testnet
 ```
 
-**What you get:**
-- ✅ HouseNFT contract deployed
-- ✅ AuctionFactory contract deployed  
-- ✅ Both verified on Blockscout
-- ✅ Factory set as trusted in NFT
+**What happens:**
+- ✅ HouseNFT contract deployed ("ZBRICKS" collection)
+- ✅ AuctionFactory contract deployed
+- ✅ Both automatically verified on Blockscout
+- ✅ Factory set as trusted in NFT contract
 
-**Save the addresses:**
+**Save the addresses to `.env`:**
 ```bash
-# Check deployment file after completion:
-cat broadcast/DeployFactory.s.sol/<CHAIN_ID>/run-latest.json
-
-# Add to .env for Step 2:
+# Copy addresses from the output
 NFT_ADDRESS=0x...
 FACTORY_ADDRESS=0x...
 ```
@@ -41,75 +57,59 @@ FACTORY_ADDRESS=0x...
 
 ### 2️⃣ Create Auction (Per Property)
 
-**Script:** `CreateAuction.s.sol`  
-**What it does:** Mints NFT and creates auction for a property  
-**When to use:** For each property you want to auction
+**Deploy individual auction for each property**
 
-**Setup `.env`:**
+**Configure in `.env`:**
 ```bash
-# Required
+# Required - Treasury and Metadata
 AUCTION_TREASURY=0xYourGnosisSafeAddress
 AUCTION_PHASE_0_URI=ipfs://QmYourPhase0Hash
 AUCTION_PHASE_1_URI=ipfs://QmYourPhase1Hash
 AUCTION_PHASE_2_URI=ipfs://QmYourPhase2Hash
 AUCTION_PHASE_3_URI=ipfs://QmYourPhase3Hash
 
-# Optional (has defaults)
-AUCTION_FLOOR_PRICE=10000000000000  # $10M
-AUCTION_PARTICIPATION_FEE=1000000000  # $1,000
-AUCTION_MIN_BID_INCREMENT=5  # 5%
-AUCTION_OPEN_DURATION=604800  # 7 days
-AUCTION_BIDDING_DURATION=1209600  # 14 days
-AUCTION_EXECUTION_PERIOD=2592000  # 30 days
+# Optional - Has Defaults (see Configuration Reference below)
+AUCTION_FLOOR_PRICE=10000000000000        # Default: $10M
+AUCTION_PARTICIPATION_FEE=1000000000      # Default: $1,000
+AUCTION_MIN_BID_INCREMENT=5               # Default: 5%
+AUCTION_OPEN_DURATION=604800              # Default: 7 days
+AUCTION_BIDDING_DURATION=1209600          # Default: 14 days
+AUCTION_EXECUTION_PERIOD=2592000          # Default: 30 days
 ```
 
 **Run:**
 ```bash
+# Base Sepolia
 forge script script/CreateAuction.s.sol:CreateAuction \
   --rpc-url https://sepolia.base.org \
   --broadcast \
   -vvvv
+
+# Base Mainnet
+forge script script/CreateAuction.s.sol:CreateAuction \
+  --rpc-url https://mainnet.base.org \
+  --broadcast \
+  -vvvv
 ```
 
-**What you get:**
-- ✅ New NFT minted (auto-incrementing token ID)
-- ✅ Phase metadata URIs set
+**What happens:**
+- ✅ New NFT minted with auto-incrementing token ID
+- ✅ Phase metadata URIs set on NFT
 - ✅ AuctionManager deployed for this property
 - ✅ NFT transferred to auction contract
+- ✅ Auction ready for bidding
 
 ---
 
-### 3️⃣ Verify Contracts (If Auto-Verification Failed)
+### 3️⃣ Extract ABIs & Addresses
 
-**Script:** `verify-contracts.sh`  
-**What it does:** Re-verifies contracts on Blockscout  
-**When to use:** If deployment verification failed or timed out
+**Get contract ABIs and deployment addresses for frontend**
 
 ```bash
-# Verify infrastructure contracts
-./script/verify-contracts.sh base-sepolia
+# Extract only ABIs (works before deployment!)
+node script/extractDeployment.js abi
 
-# Verify on mainnet
-./script/verify-contracts.sh base
-```
-
-**Supports:**
-- ✅ Blockscout (Base, Base Sepolia)
-- ✅ ArcScan (Arc Testnet, Arc Mainnet)
-- ✅ Sourcify (automatically via Blockscout)
-
-**Note:** This uses the deployment artifacts from `broadcast/` folder.
-
----
-
-### 4️⃣ Extract Frontend Data
-
-**Script:** `extractDeployment.js`  
-**What it does:** Generates JSON files with addresses and ABIs for frontend  
-**When to use:** After deploying to integrate with your dApp
-
-```bash
-# Extract all networks
+# Extract all networks (ABIs + addresses)
 node script/extractDeployment.js all
 
 # Extract specific network
@@ -118,11 +118,15 @@ node script/extractDeployment.js 8453   # Base Mainnet
 ```
 
 **Generates:**
-- `deployments/addresses.json` - All contract addresses by chain
-- `deployments/abi/HouseNFT.json` - NFT contract ABI
-- `deployments/abi/AuctionFactory.json` - Factory contract ABI
-- `deployments/abi/AuctionManager.json` - Auction contract ABI
-- `deployments/README.md` - Integration guide
+```
+deployments/
+├── abi/
+│   ├── HouseNFT.json           # NFT contract ABI
+│   ├── AuctionFactory.json     # Factory contract ABI
+│   └── AuctionManager.json     # Auction contract ABI
+├── addresses.json              # All deployments by chain
+└── README.md                   # Integration guide
+```
 
 **Frontend usage:**
 ```javascript
@@ -132,37 +136,73 @@ const auctionAbi = require('./deployments/abi/AuctionManager.json');
 // Get contract for Base Sepolia
 const chainId = '84532';
 const auctionAddress = addresses[chainId].contracts.AuctionManager;
+
+// Use with ethers.js or viem
+const contract = new ethers.Contract(auctionAddress, auctionAbi, provider);
 ```
+
+**💡 Pro Tip:** Run `node script/extractDeployment.js abi` anytime after `forge build` to get ABIs - no deployment needed!
 
 ---
 
-## 🔄 Typical Workflow
+### 4️⃣ Verify Contracts (If Needed)
+
+**Re-verify contracts if auto-verification failed**
+
+```bash
+# Base Sepolia
+./script/verify-contracts.sh base-sepolia
+
+# Base Mainnet
+./script/verify-contracts.sh base
+```
+
+**When to use:**
+- Auto-verification timeout during deployment
+- Want to re-verify with updated source
+- Verification failed due to network issues
+
+---
+
+## 🔄 Complete Workflows
 
 ### First Deployment (Testnet)
 
 ```bash
 # 1. Setup
 cp .env.example .env
-# Edit .env and add PRIVATE_KEY
+# Add PRIVATE_KEY to .env
 
-# 2. Deploy infrastructure
+# 2. Compile
+forge build
+
+# 3. Extract ABIs (optional - for frontend development)
+node script/extractDeployment.js abi
+
+# 4. Deploy infrastructure
 ./script/deploy-and-verify.sh base-sepolia
 
-# 3. Save addresses to .env
-NFT_ADDRESS=0x... (from output)
-FACTORY_ADDRESS=0x... (from output)
+# 5. Save addresses to .env
+NFT_ADDRESS=0x...
+FACTORY_ADDRESS=0x...
 
-# 4. Configure first auction in .env
-# Set AUCTION_TREASURY, AUCTION_PHASE_*_URI, etc.
+# 6. Configure auction in .env
+AUCTION_TREASURY=0x...
+AUCTION_PHASE_0_URI=ipfs://Qm...
+AUCTION_PHASE_1_URI=ipfs://Qm...
+AUCTION_PHASE_2_URI=ipfs://Qm...
+AUCTION_PHASE_3_URI=ipfs://Qm...
 
-# 5. Create first auction
+# 7. Create first auction
 forge script script/CreateAuction.s.sol:CreateAuction \
   --rpc-url https://sepolia.base.org \
   --broadcast
 
-# 6. Extract for frontend
+# 8. Extract deployment data
 node script/extractDeployment.js all
 ```
+
+---
 
 ### Adding More Properties
 
@@ -170,9 +210,10 @@ node script/extractDeployment.js all
 # 1. Update .env with new property metadata
 AUCTION_PHASE_0_URI=ipfs://QmNewProperty...
 AUCTION_PHASE_1_URI=ipfs://QmNewProperty...
-# ... etc
+AUCTION_PHASE_2_URI=ipfs://QmNewProperty...
+AUCTION_PHASE_3_URI=ipfs://QmNewProperty...
 
-# 2. Create auction (reuses same infrastructure)
+# 2. Create auction (reuses existing infrastructure)
 forge script script/CreateAuction.s.sol:CreateAuction \
   --rpc-url https://sepolia.base.org \
   --broadcast
@@ -180,6 +221,8 @@ forge script script/CreateAuction.s.sol:CreateAuction \
 # 3. Update frontend data
 node script/extractDeployment.js all
 ```
+
+---
 
 ### Production Deployment
 
@@ -193,7 +236,8 @@ FACTORY_ADDRESS=0x...
 
 # 3. Configure production auction
 AUCTION_TREASURY=0xYourProductionGnosisSafe
-# ... configure other parameters
+AUCTION_PHASE_0_URI=ipfs://Qm...
+# ... set all phase URIs
 
 # 4. Create auction
 forge script script/CreateAuction.s.sol:CreateAuction \
@@ -206,18 +250,20 @@ node script/extractDeployment.js 8453
 
 ---
 
+---
+
 ## ⚙️ Configuration Reference
 
 ### USDC Amounts (6 decimals)
-```bash
-$1,000     = 1000000000      (1,000 × 10^6)
-$100,000   = 100000000000    (100,000 × 10^6)
-$1,000,000 = 1000000000000   (1,000,000 × 10^6)
-$10,000,000 = 10000000000000 (10,000,000 × 10^6)
+```
+$1,000      = 1000000000       (1,000 × 10⁶)
+$100,000    = 100000000000     (100,000 × 10⁶)
+$1,000,000  = 1000000000000    (1,000,000 × 10⁶)
+$10,000,000 = 10000000000000   (10,000,000 × 10⁶)
 ```
 
 ### Time Durations (seconds)
-```bash
+```
 1 day   = 86400
 7 days  = 604800
 14 days = 1209600
@@ -225,67 +271,142 @@ $10,000,000 = 10000000000000 (10,000,000 × 10^6)
 ```
 
 ### Supported Networks
-```bash
+```
 base-sepolia  # Base Sepolia Testnet (Chain ID: 84532)
 base          # Base Mainnet (Chain ID: 8453)
-arc-testnet   # Arc Testnet (Chain ID: 5042002)
-arc           # Arc Mainnet (Chain ID: 5042000)
 ```
+
+### Default Auction Parameters
+
+| Parameter | Default Value | Description |
+|-----------|--------------|-------------|
+| `AUCTION_FLOOR_PRICE` | `10000000000000` | $10M minimum bid |
+| `AUCTION_PARTICIPATION_FEE` | `1000000000` | $1,000 entry fee |
+| `AUCTION_MIN_BID_INCREMENT` | `5` | 5% minimum increase |
+| `AUCTION_OPEN_DURATION` | `604800` | 7 days (Phase 0) |
+| `AUCTION_BIDDING_DURATION` | `1209600` | 14 days (Phase 1) |
+| `AUCTION_EXECUTION_PERIOD` | `2592000` | 30 days (Phase 2) |
+
+**Note:** Only set in `.env` if you want to override defaults.
 
 ---
 
-## 🛠️ Admin Operations (Manual)
+## 🛠️ Admin Operations
 
-After deployment, manage auctions via contract interactions:
+After auction deployment, manage via contract interactions:
 
 ```solidity
-// Advance phase (call from admin address)
+// Advance to next phase (after minimum duration)
 auctionManager.advancePhase();
 
-// Finalize auction (after phase 3)
+// Finalize auction (after phase 2 complete)
 auctionManager.finalizeAuction();
 
-// Withdraw proceeds (admin)
+// Withdraw winning bid to treasury
 auctionManager.withdrawProceeds();
 
-// Emergency pause (admin only)
+// Emergency controls (admin only)
 auctionManager.pause();
 auctionManager.unpause();
+auctionManager.emergencyWithdrawNFT();
+auctionManager.emergencyWithdrawFunds();
 ```
 
-Use tools like:
-- Etherscan/Blockscout Write Contract interface
-- Foundry's `cast send` command
-- Your frontend admin panel
-- Gnosis Safe (recommended for production)
+**Interaction methods:**
+- **Blockscout:** Use "Write Contract" tab on verified contracts
+- **Foundry:** `cast send <contract> "<function>" --rpc-url <url> --private-key <key>`
+- **Gnosis Safe:** Recommended for production (multi-sig security)
+- **Frontend:** Build admin dashboard for your team
 
 ---
-
-## 📚 Additional Resources
-
-- **[README.md](README.md)** - Complete project overview
-- **[CONTRACT-REFERENCE.md](CONTRACT-REFERENCE.md)** - Full API documentation
-- **[AUCTION-FLOW.md](AUCTION-FLOW.md)** - Auction mechanics guide
-- **[.env.example](.env.example)** - Configuration template
 
 ## 🆘 Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| "PRIVATE_KEY not set" | Add to `.env`: `PRIVATE_KEY=0x...` |
-| "NFT_ADDRESS not set" | Run Step 1 first, then add addresses to `.env` |
-| "Verification failed" | Run `./script/verify-contracts.sh <network>` |
-| "Treasury address must be set" | Add to `.env`: `AUCTION_TREASURY=0x...` |
-| "Phase URI must be set" | Add all 4 IPFS URIs to `.env` |
-| "Insufficient funds" | Fund your wallet with ETH for gas |
-| "export: not a valid identifier" | `.env` has invalid format - copy from `.env.example` |
+| **"PRIVATE_KEY not set"** | Add to `.env`: `PRIVATE_KEY=0x...` |
+| **"NFT_ADDRESS not set"** | Deploy infrastructure first (Step 1) |
+| **"Verification failed"** | Wait 30s, then run `./script/verify-contracts.sh <network>` |
+| **"Treasury must be set"** | Add to `.env`: `AUCTION_TREASURY=0x...` |
+| **"Phase URI must be set"** | Upload metadata to IPFS, add all 4 URIs to `.env` |
+| **"Insufficient funds"** | Fund wallet with ETH for gas fees |
+| **"Contract must own NFT"** | Factory transfers NFT atomically - check factory is trusted |
+| **"export: not valid"** | Fix `.env` format - use `.env.example` as template |
 
-**Tips:**
-- ✅ Use `.env.example` as template - inline comments are supported
-- ✅ No quotes needed around values: `PRIVATE_KEY=0xabc123`
-- ✅ Comments must be on their own line or after a space and `#`
-- ❌ Avoid special shell characters in values (`, $, !, etc.)
+### Common `.env` Mistakes
+
+✅ **Correct:**
+```bash
+PRIVATE_KEY=0xabc123
+AUCTION_TREASURY=0x1234567890
+```
+
+❌ **Incorrect:**
+```bash
+PRIVATE_KEY="0xabc123"      # No quotes
+export PRIVATE_KEY=0xabc123  # No export keyword
+PRIVATE_KEY = 0xabc123       # No spaces around =
+```
 
 ---
 
-**Need help?** Check the main [README.md](README.md) for detailed documentation.
+## 📊 Deployment Checklist
+
+### Before Mainnet Deployment
+
+- [ ] Tested full auction flow on Base Sepolia
+- [ ] Verified all contracts on block explorer
+- [ ] Treasury is Gnosis Safe (not EOA)
+- [ ] All phase metadata uploaded to IPFS/Arweave
+- [ ] Confirmed metadata URIs are accessible
+- [ ] Reviewed auction parameters (floor price, fees, durations)
+- [ ] Admin wallet is secure (hardware wallet recommended)
+- [ ] Emergency procedures documented
+- [ ] Team trained on admin operations
+
+### Post-Deployment
+
+- [ ] Extracted ABIs and addresses for frontend
+- [ ] Verified contracts on Blockscout
+- [ ] Tested admin functions (advance phase, etc.)
+- [ ] Set up monitoring for auction events
+- [ ] Configured alerts for treasury transactions
+- [ ] Documented all deployed addresses
+- [ ] Backed up deployment artifacts
+
+---
+
+## 📚 Additional Resources
+
+- **[README.md](README.md)** - Complete project overview and features
+- **[CONTRACT-REFERENCE.md](CONTRACT-REFERENCE.md)** - Full contract API documentation
+- **[AUCTION-FLOW.md](AUCTION-FLOW.md)** - Detailed auction mechanics guide
+- **[.env.example](.env.example)** - Configuration template with all options
+
+---
+
+## 💡 Tips & Best Practices
+
+### Development
+- Use Base Sepolia for testing - it's free and fast
+- Run `forge test` before every deployment
+- Keep deployment logs for audit trail
+- Version control your `.env.example` (never `.env`!)
+
+### Production
+- Always use Gnosis Safe as treasury
+- Set admin to multisig for security
+- Start with conservative phase durations
+- Monitor auction events in real-time
+- Have emergency procedures ready
+
+### Frontend Integration
+- Extract ABIs early with `node script/extractDeployment.js abi`
+- ABIs are the same across all networks
+- Use chain ID to select correct addresses
+- Cache contract instances per chain
+- Handle network switching gracefully
+
+---
+
+**Questions?** Check the main [README.md](README.md) for detailed documentation or open an issue on GitHub.
