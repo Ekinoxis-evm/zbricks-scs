@@ -334,9 +334,9 @@ The system is deployed on multiple networks. All contracts are verified on Block
 
 | Contract | Address |
 |----------|---------|
-| **HouseNFT** | [`0xe23157f7d8ad43bfcf7aaff64257fd0fa17177d6`](https://base-sepolia.blockscout.com/address/0xe23157f7d8ad43bfcf7aaff64257fd0fa17177d6) |
-| **AuctionFactory** | [`0xd3390e5fec170d7577c850f5687a6542b66a4bbd`](https://base-sepolia.blockscout.com/address/0xd3390e5fec170d7577c850f5687a6542b66a4bbd) |
-| **AuctionManager** | [`0x3347f6a853e04281daa0314f49a76964f010366f`](https://base-sepolia.blockscout.com/address/0x3347f6a853e04281daa0314f49a76964f010366f) |
+| **HouseNFT** | [`0x2452791d09506e21eb2936f5748c5006965fb325`](https://base-sepolia.blockscout.com/address/0x2452791d09506e21eb2936f5748c5006965fb325) |
+| **AuctionFactory** | [`0x9be95601c0b39705170b2424821aaab437be181c`](https://base-sepolia.blockscout.com/address/0x9be95601c0b39705170b2424821aaab437be181c) |
+| **AuctionManager** | [`0x9ae16c5e86b8069529f19f363b3c7e3bb96e9f73`](https://base-sepolia.blockscout.com/address/0x9ae16c5e86b8069529f19f363b3c7e3bb96e9f73) |
 
 </details>
 
@@ -345,9 +345,8 @@ The system is deployed on multiple networks. All contracts are verified on Block
 
 | Contract | Address |
 |----------|---------|
-| **HouseNFT** | [`0x335845ef4f622145d963c9f39d6ff1b60757fee4`](https://base.blockscout.com/address/0x335845ef4f622145d963c9f39d6ff1b60757fee4) |
-| **AuctionFactory** | [`0x57cdf2cdeae3f54e598e8def3583a251fec0eaf7`](https://base.blockscout.com/address/0x57cdf2cdeae3f54e598e8def3583a251fec0eaf7) |
-| **AuctionManager** | [`0xe6afb32fdd1c03edd3dc2f1b0037c3d4580d6dca`](https://base.blockscout.com/address/0xe6afb32fdd1c03edd3dc2f1b0037c3d4580d6dca) |
+| **HouseNFT** | [`0x776b8158269fbd7fd6a91a0514b8850777ac0227`](https://base.blockscout.com/address/0x776b8158269fbd7fd6a91a0514b8850777ac0227) |
+| **AuctionFactory** | [`0x3347f6a853e04281daa0314f49a76964f010366f`](https://base.blockscout.com/address/0x3347f6a853e04281daa0314f49a76964f010366f) |
 
 </details>
 

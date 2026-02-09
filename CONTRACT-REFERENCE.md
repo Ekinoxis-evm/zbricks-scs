@@ -28,9 +28,8 @@ Multi-token ERC721 representing properties with phase-based metadata reveals. Ea
 
 | Network | Address | Explorer |
 |---------|---------|----------|
-| **Base Sepolia** | `0xe23157f7d8ad43bfcf7aaff64257fd0fa17177d6` | [View](https://base-sepolia.blockscout.com/address/0xe23157f7d8ad43bfcf7aaff64257fd0fa17177d6) |
-| **Base Mainnet** | `0x335845ef4f622145d963c9f39d6ff1b60757fee4` | [View](https://base.blockscout.com/address/0x335845ef4f622145d963c9f39d6ff1b60757fee4) |
-| **Arc Testnet** | `0x335845ef4f622145d963c9f39d6ff1b60757fee4` | [View](https://testnet.arcscan.app/address/0x335845ef4f622145d963c9f39d6ff1b60757fee4) |
+| **Base Sepolia** | `0x2452791d09506e21eb2936f5748c5006965fb325` | [View](https://base-sepolia.blockscout.com/address/0x2452791d09506e21eb2936f5748c5006965fb325) |
+| **Base Mainnet** | `0x776b8158269fbd7fd6a91a0514b8850777ac0227` | [View](https://base.blockscout.com/address/0x776b8158269fbd7fd6a91a0514b8850777ac0227) |
 
 ### Constructor
 
