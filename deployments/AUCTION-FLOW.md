@@ -71,16 +71,10 @@ The ZBrick auction system uses a **factory pattern** for efficient multi-propert
 #### One-Time Infrastructure (Per Network)
 
 ```bash
-# Deploy HouseNFT (ZBRICKS) + AuctionFactory (once per network)
-./script/deploy-and-verify.sh base-sepolia
-./script/deploy-and-verify.sh base
-
-# (Recommended) Re-run full verification across Blockscout, Basescan, Sourcify
-./script/verify-etherscan.sh base-sepolia
-./script/verify-etherscan.sh base
+# Deploy HouseNFT (ZBRICKS) and AuctionFactory once
+forge script script/DeployFactory.s.sol:DeployFactory \
+    --rpc-url <network> --broadcast --verify
 ```
-
-**Environment:** `deploy-and-verify.sh` reads `PRIVATE_KEY` (and optional custom RPCs) from `.env`. The multi-verifier script additionally uses `ETHERSCAN_API_KEY` / `BASESCAN_API_KEY` to submit verification jobs.
 
 **Deploys:**
 1. `HouseNFT` ("ZBRICKS", "ZBR") - Multi-token NFT contract
@@ -92,21 +86,18 @@ The ZBrick auction system uses a **factory pattern** for efficient multi-propert
 #### Per-Property Auction Creation
 
 ```bash
-# Configure .env with AUCTION_* values, then broadcast per property
+# Update CreateAuction.s.sol with property parameters, then:
 forge script script/CreateAuction.s.sol:CreateAuction \
     --rpc-url <network> --broadcast
 ```
 
-**Configuration (all in `.env`):**
-- `AUCTION_FLOOR_PRICE` (USDC 6 decimals)
-- `AUCTION_PARTICIPATION_FEE` (optional, USDC 6 decimals)
-- `AUCTION_MIN_BID_INCREMENT` (percentage)
-- `AUCTION_OPEN_DURATION`, `AUCTION_BIDDING_DURATION`, `AUCTION_EXECUTION_PERIOD` (seconds)
-- `AUCTION_TREASURY` (Gnosis Safe / multisig)
-- `AUCTION_ADMIN` (optional override; defaults to deployer when omitted)
-- `AUCTION_PHASE_0_URI` … `AUCTION_PHASE_3_URI` (IPFS/Arweave)
-
-`CreateAuction.s.sol` pulls every value from `.env`, so no script edits are required when launching additional properties. Use `.env.example` as the canonical list of supported keys.
+**Configuration (in script):**
+- Floor price (e.g., $10M)
+- Phase durations (e.g., 7/14/30 days)
+- Participation fee (e.g., $1000)
+- Treasury address (Gnosis Safe)
+- Admin address (controls phases)
+- Phase URIs (IPFS metadata)
 
 **Atomic Process:**
 1. ✅ Mint NFT to factory (`nft.mintTo(factory)`)
@@ -1027,22 +1018,16 @@ The HouseNFT contract returns different metadata URIs based on the current phase
 ### How Metadata Updates
 
 ```solidity
-// Admin advances auction phase after duration checks pass
+// Admin advances auction phase
 auction.advancePhase();  // Phase 0 → Phase 1
 
-// Admin must also advance the NFT metadata for tokenId 1
-houseNFT.advancePhase(1, 1);  // (tokenId, newPhase)
-
-// Controller restriction: AuctionManager can only call
-// houseNFT.advancePhase(tokenId, 3) during finalization.
-// Phases 0 → 2 must be advanced by the HouseNFT admin.
+// Admin advances NFT metadata
+houseNFT.advancePhase(1);  // Metadata Phase 0 → Phase 1
 
 // NFT now returns Phase 1 URI
 string memory uri = houseNFT.tokenURI(1);
 // Returns: phaseURIs[1]
 ```
-
-> ℹ️ **Metadata sync tip:** Because controllers can only jump directly to phase 3, the admin (or delegated multisig) must keep NFT metadata in sync for phases 0 → 1 → 2 whenever the auction is advanced.
 
 ### Frontend Display
 
@@ -1074,14 +1059,6 @@ nftContract.on("PhaseAdvanced", async (newPhase) => {
     await displayNFT(); // Refresh display
 });
 ```
-
-### Listing Available Auctions
-
-- Load the latest factory address for each chain from [deployments/addresses.json](deployments/addresses.json).
-- Query AuctionFactory `getAuctions()` / `getAuctionCount()` as documented in [CONTRACT-REFERENCE.md](CONTRACT-REFERENCE.md#auctionfactory) to enumerate every deployed auction owned by that factory.
-- Instantiate each returned address with `deployments/abi/AuctionManager.json` to pull live auction data for cards, tables, or maps.
-
-This keeps the frontend in sync with on-chain deployments without a separate registry. If you need a static snapshot at build time, run `node script/extractDeployment.js all` to regenerate the `deployments/addresses.json` artifact.
 
 ---
 

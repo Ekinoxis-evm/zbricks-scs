@@ -216,28 +216,23 @@ nft.updatePhaseURI(1, 0, "ipfs://Qm.../new-phase0.json");
 
 #### advancePhase
 ```solidity
-function advancePhase(uint256 tokenId, uint8 newPhase) external
+function advancePhase(uint256 tokenId) external
 ```
 
-**Description**: Advances a house token to a specific metadata phase. Admins must follow sequential phases, while the per-auction controller can only jump directly to phase 3 during finalization.
+**Description**: Advances to the next metadata phase for the token.
 
 **Access**: Admin OR token controller  
 **Parameters:**
 - `tokenId`: Token ID to advance
-- `newPhase`: Target phase (0-3). Admin must set `newPhase = currentPhase + 1`; controller may only pass `3`.
 
-**Behavior:**
-- Phases progress 0 → 1 → 2 → 3 under admin supervision.
-- AuctionManager (controller) can only finalize metadata by setting `newPhase = 3`.
-- Calls without `tokenId` are rejected via the legacy overload `advancePhase(uint8)`.
+**Phases:**
+- 0 → 1 (Initial → Active Bidding)
+- 1 → 2 (Active → Grace Period)  
+- 2 → 3 (Grace → Finalized)
 
 **Example:**
 ```solidity
-// Admin reveals phase 1 metadata
-nft.advancePhase(1, 1);
-
-// Auction controller finalizes NFT metadata after settlement
-nft.advancePhase(1, 3);
+nft.advancePhase(1); // Advance token 1 to next phase
 ```
 
 ---
@@ -941,101 +936,113 @@ event AuctionCreated(
 
 ## Deployment Workflow
 
-### Environment Setup
-
-1. Copy [.env.example](.env.example) to `.env` and populate the values below.
-2. Always keep sensitive values (private keys, treasury, URIs) inside `.env` instead of touching the scripts.
-
-**Baseline keys**
-- `PRIVATE_KEY`: Deployer private key used for all scripts.
-- `NFT_ADDRESS` / `FACTORY_ADDRESS`: Populated after infrastructure deployment.
-- `AUCTION_*`: Configuration for each new auction; see list below.
-
-**Auction configuration keys**
-- `AUCTION_FLOOR_PRICE`
-- `AUCTION_OPEN_DURATION`
-- `AUCTION_BIDDING_DURATION`
-- `AUCTION_EXECUTION_PERIOD`
-- `AUCTION_MIN_BID_INCREMENT`
-- `AUCTION_PARTICIPATION_FEE`
-- `AUCTION_TREASURY`
-- `AUCTION_ADMIN` *(optional, falls back to deployer)*
-- `AUCTION_PHASE_0_URI` … `AUCTION_PHASE_3_URI`
-
 ### Infrastructure Deployment (Once Per Network)
 
-Deploy and auto-verify HouseNFT + AuctionFactory with the helper script:
+Deploy the shared infrastructure using `DeployFactory.s.sol`:
 
 ```bash
-./script/deploy-and-verify.sh base-sepolia
-# or
-./script/deploy-and-verify.sh base
+# Set environment variables
+export PRIVATE_KEY=0x...
+export USDC_ADDRESS=0x...  # See network-specific addresses below
+
+# Deploy to network
+forge script script/DeployFactory.s.sol:DeployFactory \
+    --rpc-url <network_name> \
+    --broadcast \
+    --verify
+
+# Save deployed addresses
+export NFT_ADDRESS=<deployed_housenft_address>
+export FACTORY_ADDRESS=<deployed_factory_address>
 ```
 
-The script:
-- Loads `.env` (for `PRIVATE_KEY`).
-- Targets the correct RPC + Blockscout verifier for Base Sepolia or Base Mainnet.
-- Runs `DeployFactory.s.sol` with `--verify`, saving receipts to `broadcast/DeployFactory.s.sol/<chainId>/`.
-- Emits both deployed addresses so you can copy them into `.env` and [deployments/addresses.json](deployments/addresses.json).
+**What Gets Deployed:**
+1. `HouseNFT` ("ZBRICKS", "ZBR")
+2. `AuctionFactory` (with immutable NFT and payment token references)
+3. Factory is automatically set as trusted in NFT contract
 
-### Re-running Verification
+**Output:** Infrastructure ready for creating multiple auctions
 
-If Blockscout verification fails or you deploy via another wallet, reuse the recorded broadcast with:
-
-```bash
-./script/verify-contracts.sh base-sepolia
-```
-
-This script resumes the latest broadcast for the chosen network and submits the metadata to Blockscout without redeploying.
+---
 
 ### Per-Auction Deployment
 
-`script/CreateAuction.s.sol` now reads every parameter from `.env`, so creating a new auction is purely data-entry:
+Create individual auctions using `CreateAuction.s.sol`:
 
-1. Update the `AUCTION_*` block in `.env` for the property you want to list (durations are seconds, prices include USDC’s 6 decimals).
-2. Run the script on the desired RPC:
+**Step 1: Update Configuration**
+
+Edit [script/CreateAuction.s.sol](script/CreateAuction.s.sol):
+```solidity
+// Auction parameters
+uint256 public constant FLOOR_PRICE = 10_000_000 * 10**6;  // $10M
+uint256 public constant OPEN_DURATION = 7 days;
+uint256 public constant BIDDING_DURATION = 14 days;
+uint256 public constant EXECUTION_PERIOD = 30 days;
+uint256 public constant PARTICIPATION_FEE = 1000 * 10**6;  // $1000
+address public constant TREASURY = 0x...;  // Gnosis Safe
+address public constant ADMIN = 0x...;     // Or use deployer
+
+// Phase metadata URIs (IPFS)
+string public constant PHASE_0_URI = "ipfs://Qm.../phase0.json";
+string public constant PHASE_1_URI = "ipfs://Qm.../phase1.json";
+string public constant PHASE_2_URI = "ipfs://Qm.../phase2.json";
+string public constant PHASE_3_URI = "ipfs://Qm.../phase3.json";
+```
+
+**Step 2: Deploy Auction**
 
 ```bash
+# Ensure NFT_ADDRESS and FACTORY_ADDRESS are set
 forge script script/CreateAuction.s.sol:CreateAuction \
-  --rpc-url https://sepolia.base.org \
-  --broadcast
+    --rpc-url <network_name> \
+    --broadcast
 ```
 
-The script will mint the next HouseNFT to the factory, write all four metadata URIs, deploy a fresh AuctionManager, set the controller, and transfer custody to the auction in one transaction.
+**What Happens:**
+1. Mints new NFT to factory (`tokenId` auto-increments)
+2. Sets all 4 phase URIs for metadata reveals
+3. Factory creates auction atomically:
+   - Verifies ownership
+   - Deploys AuctionManager
+   - Sets controller
+   - Transfers NFT to auction
+4. Returns auction address
 
-3. Export the new addresses for the frontend and docs:
+**Output:** Independent auction ready for bidding
+
+---
+
+### Example: Full Deployment
 
 ```bash
-node script/extractDeployment.js base-sepolia
-# or generate every chain at once
-node script/extractDeployment.js all
-```
+# 1. Deploy infrastructure on Base Sepolia
+export PRIVATE_KEY=0xabc...
+export USDC_ADDRESS=0x036CbD53842c5426634e7929541eC2318f3dCF7e
 
-### Example Session
+forge script script/DeployFactory.s.sol:DeployFactory \
+    --rpc-url base_sepolia \
+    --broadcast
 
-```bash
-# 1) Configure secrets
-cp .env.example .env
-echo "PRIVATE_KEY=0x..." >> .env
+# Save addresses
+export NFT_ADDRESS=0xe23157f7d8ad43bfcf7aaff64257fd0fa17177d6
+export FACTORY_ADDRESS=0xd3390e5fec170d7577c850f5687a6542b66a4bbd
 
-# 2) Deploy infrastructure on Base Sepolia and auto-verify
-./script/deploy-and-verify.sh base-sepolia
-
-# 3) Paste NFT and factory addresses from broadcast into .env
-echo "NFT_ADDRESS=0x..." >> .env
-echo "FACTORY_ADDRESS=0x..." >> .env
-
-# 4) Fill AUCTION_* values (price, durations, URIs, treasury)
-# 5) Create the auction
+# 2. Create first auction (Property #1)
+# Update CreateAuction.s.sol with property details
 forge script script/CreateAuction.s.sol:CreateAuction \
-  --rpc-url https://sepolia.base.org \
-  --broadcast
+    --rpc-url base_sepolia \
+    --broadcast
 
-# 6) Refresh deployments/addresses.json for the frontend/api layer
-node script/extractDeployment.js base-sepolia
+# Auction created at: 0x3347f6a853e04281daa0314f49a76964f010366f
+
+# 3. Create second auction (Property #2)
+# Update CreateAuction.s.sol with new property details
+forge script script/CreateAuction.s.sol:CreateAuction \
+    --rpc-url base_sepolia \
+    --broadcast
+
+# Each auction is independent with own parameters
 ```
-
-Each auction runs independently with its own parameters while sharing the same HouseNFT + payment token infrastructure.
 
 ---
 
@@ -1061,19 +1068,18 @@ All contract ABIs are available in [`deployments/abi/`](./deployments/abi/):
 #### Full Deployment Flow
 
 ```bash
-# 1. Deploy contracts (HouseNFT + Factory) with auto-verification
-./script/deploy-and-verify.sh base-sepolia
+# 1. Deploy contracts (NFT + Factory + Auction)
+cd script
+./deploy-and-verify.sh base_sepolia
 
-# 2. Extract deployment addresses for the frontend/api layers
-node script/extractDeployment.js base-sepolia
+# 2. Extract deployment addresses
+node extractDeployment.js
 
 # 3. Check deployed addresses
-cat deployments/addresses.json
+cat ../deployments/addresses.json
 ```
 
 #### Complete Auction Lifecycle
-
-> ℹ️ CreateAuction.s.sol already handles minting, URIs, and transfers. The first step below is only needed when manually wiring up a dev auction.
 
 ```bash
 # Set variables
@@ -1081,7 +1087,7 @@ NFT_ADDRESS="<HouseNFT address from addresses.json>"
 AUCTION_ADDRESS="<AuctionManager address from addresses.json>"
 PAYMENT_TOKEN="<USDC address for network>"
 
-# 1. (Optional) Mint NFT directly to the auction contract for manual testing
+# 1. Mint NFT to auction contract
 cast send $NFT_ADDRESS "mintTo(address)" $AUCTION_ADDRESS \
     --private-key $PRIVATE_KEY --rpc-url base_sepolia
 
